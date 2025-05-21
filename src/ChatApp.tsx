@@ -32,6 +32,21 @@ const ChatApp = () => {
   const [manualText, setManualText] = useState("");
   const [hasSentMessage, setHasSentMessage] = useState(false);
   const fileInputRef = useRef(null);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
+
+  // Effect for online/offline status
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Save API key to localStorage when it changes
   useEffect(() => {
@@ -174,6 +189,13 @@ const ChatApp = () => {
     if (!apiKey.trim()) {
       setError("Please enter an API key first");
       setTimeout(() => setError(null), 3000);
+      return;
+    }
+    if (!isOnline) {
+      setError(
+        "No internet connection. Please check your connection and try again."
+      );
+      setTimeout(() => setError(null), 5000);
       return;
     }
 
@@ -412,23 +434,34 @@ const ChatApp = () => {
         <div className="flex-1 flex flex-col">
           {/* Chat history */}
           <div className="flex-1 p-4 overflow-y-auto">
+            {!isOnline && (
+              <div className="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4">
+                <p>No internet connection. Some features may be unavailable.</p>
+              </div>
+            )}
             {chatHistory.length === 0 ? (
               <div className="h-full flex items-center justify-center text-gray-500">
                 <div>
                   <p className="mb-2 font-semibold">How to use this app:</p>
                   <ul className="list-disc list-inside text-sm space-y-1">
                     <li>Enter your API key in the sidebar.</li>
-                    <li>Upload documents or input text to analyze.</li>
                     <li>
-                      Type your message below and press <b>Send</b>
+                      Upload documents or input text (max 3,000 characters per
+                      text input) to analyze.
+                    </li>
+                    <li>
+                      Type your message query below and press <b>Send</b>
                     </li>
                     <li>
                       The assistant will respond based on the provided context.
                     </li>
+                    <li>
+                      An internet connection is required to get responses.
+                    </li>
                     <li>Only one message can be sent per chat.</li>
                     <li>
-                      After receiving a response, click on the "New Chat" or
-                      "Save" button to save it.
+                      After receiving a response, click on the "New Chat" button
+                      to save it.
                     </li>
                     <li>Click on a chat to rename it or view its details.</li>
                   </ul>
@@ -480,9 +513,9 @@ const ChatApp = () => {
               />
               <button
                 onClick={sendMessage}
-                disabled={isLoading || hasSentMessage}
+                disabled={isLoading || hasSentMessage || !isOnline}
                 className={`px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors self-end ${
-                  (isLoading || hasSentMessage) &&
+                  (isLoading || hasSentMessage || !isOnline) &&
                   "opacity-50 cursor-not-allowed"
                 }`}
               >
