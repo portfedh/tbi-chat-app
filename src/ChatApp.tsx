@@ -1,17 +1,38 @@
-import React, { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect } from "react";
+import type { ChangeEvent, KeyboardEvent } from "react";
+
+// Types
+interface ChatMessage {
+  role: "user" | "assistant" | "system";
+  content: string;
+}
+
+interface DocumentItem {
+  name: string;
+  type: string;
+  content: string;
+}
+
+interface SavedChat {
+  id: string;
+  title: string;
+  messages: ChatMessage[];
+  documents: DocumentItem[];
+  timestamp: string;
+}
 
 const ChatApp = () => {
-  const [apiKey, setApiKey] = useState(() => {
+  const [apiKey, setApiKey] = useState<string>(() => {
     const storedApiKey = localStorage.getItem("chatAppApiKey");
     return storedApiKey || "";
   });
-  const [message, setMessage] = useState("");
-  const [chatHistory, setChatHistory] = useState([]);
-  const [savedChats, setSavedChats] = useState(() => {
+  const [message, setMessage] = useState<string>("");
+  const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
+  const [savedChats, setSavedChats] = useState<SavedChat[]>(() => {
     const storedSavedChats = localStorage.getItem("chatAppSavedChats");
     if (storedSavedChats) {
       try {
-        return JSON.parse(storedSavedChats);
+        return JSON.parse(storedSavedChats) as SavedChat[];
       } catch (error) {
         console.error(
           "Failed to parse saved chats from localStorage on init:",
@@ -23,17 +44,17 @@ const ChatApp = () => {
     }
     return [];
   });
-  const [currentChatId, setCurrentChatId] = useState("new");
-  const [currentChatTitle, setCurrentChatTitle] = useState("New Chat");
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState(null);
-  const [documents, setDocuments] = useState([]);
-  const [showTextInput, setShowTextInput] = useState(false);
-  const [manualText, setManualText] = useState("");
-  const [hasSentMessage, setHasSentMessage] = useState(false);
-  const fileInputRef = useRef(null);
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [isRetrying, setIsRetrying] = useState(false); // New state for retry feedback
+  const [currentChatId, setCurrentChatId] = useState<string>("new");
+  const [currentChatTitle, setCurrentChatTitle] = useState<string>("New Chat");
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [documents, setDocuments] = useState<DocumentItem[]>([]);
+  const [showTextInput, setShowTextInput] = useState<boolean>(false);
+  const [manualText, setManualText] = useState<string>("");
+  const [hasSentMessage, setHasSentMessage] = useState<boolean>(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isOnline, setIsOnline] = useState<boolean>(navigator.onLine);
+  const [isRetrying, setIsRetrying] = useState<boolean>(false);
 
   const MAX_RETRIES = 5;
   const INITIAL_BACKOFF_MS = 1000;
@@ -63,13 +84,13 @@ const ChatApp = () => {
   }, [savedChats]);
 
   // Make sure the input fields work correctly
-  const handleApiKeyChange = (e) => {
+  const handleApiKeyChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value;
     console.log("API Key Change:", newValue);
     setApiKey(newValue);
   };
 
-  const handleMessageChange = (e) => {
+  const handleMessageChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
     console.log("Message Change:", newValue);
     setMessage(newValue);
@@ -86,16 +107,19 @@ const ChatApp = () => {
 
   const saveCurrentChat = () => {
     if (chatHistory.length > 0) {
-      const chatToSave = {
+      const chatToSave: SavedChat = {
         id: currentChatId === "new" ? Date.now().toString() : currentChatId,
         title:
-          currentChatTitle || chatHistory[0].content.substring(0, 30) + "...",
+          currentChatTitle ||
+          (chatHistory[0]?.content
+            ? chatHistory[0].content.substring(0, 30) + "..."
+            : "Untitled"),
         messages: chatHistory,
         documents: documents,
         timestamp: new Date().toISOString(),
       };
 
-      setSavedChats((prevChats) => {
+      setSavedChats((prevChats: SavedChat[]) => {
         // If updating existing chat, remove the old version
         const filteredChats =
           currentChatId !== "new"
@@ -110,7 +134,7 @@ const ChatApp = () => {
     }
   };
 
-  const loadChat = (chatId) => {
+  const loadChat = (chatId: string) => {
     saveCurrentChat();
     const chatToLoad = savedChats.find((chat) => chat.id === chatId);
     if (chatToLoad) {
@@ -122,9 +146,12 @@ const ChatApp = () => {
     }
   };
 
-  const deleteChat = (chatId, e) => {
+  const deleteChat = (
+    chatId: string,
+    e: React.MouseEvent<HTMLButtonElement>
+  ) => {
     e.stopPropagation();
-    setSavedChats((prevChats) =>
+    setSavedChats((prevChats: SavedChat[]) =>
       prevChats.filter((chat) => chat.id !== chatId)
     );
     if (currentChatId === chatId) {
@@ -132,22 +159,25 @@ const ChatApp = () => {
     }
   };
 
-  const updateChatTitle = (e) => {
+  const updateChatTitle = (e: ChangeEvent<HTMLInputElement>) => {
     setCurrentChatTitle(e.target.value);
   };
 
-  const handleFileUpload = (e) => {
-    const newFiles = Array.from(e.target.files);
+  const handleFileUpload = (e: ChangeEvent<HTMLInputElement>) => {
+    const newFiles = Array.from(e.target.files ?? []);
 
     // Read file contents
     const filesWithContent = newFiles.map((file) => {
-      return new Promise((resolve) => {
+      return new Promise<DocumentItem>((resolve) => {
         const reader = new FileReader();
         reader.onload = (event) => {
           resolve({
             name: file.name,
             type: file.type,
-            content: (event.target.result as string).substring(0, 3000),
+            content:
+              typeof event.target?.result === "string"
+                ? event.target.result.substring(0, 3000)
+                : "",
           });
         };
         reader.readAsText(file);
@@ -161,7 +191,7 @@ const ChatApp = () => {
 
   const handleManualTextSubmit = () => {
     if (manualText.trim()) {
-      const manualDoc = {
+      const manualDoc: DocumentItem = {
         name: `Manual text (${new Date().toLocaleTimeString()})`,
         type: "text/plain",
         content: manualText.substring(0, 3000),
@@ -172,7 +202,7 @@ const ChatApp = () => {
     }
   };
 
-  const removeDocument = (index) => {
+  const removeDocument = (index: number) => {
     setDocuments((docs) => docs.filter((_, i) => i !== index));
   };
 
@@ -203,21 +233,19 @@ const ChatApp = () => {
       return;
     }
 
-    const userMessage = { role: "user", content: message };
+    const userMessage: ChatMessage = { role: "user", content: message };
     const context = documents.map((doc) => doc.content).join("\n\n");
-    const contextMessage = context
+    const contextMessage: ChatMessage | null = context
       ? { role: "system", content: `Context:\n${context}` }
       : null;
 
     // Prepare messages for the API call
-    // chatHistory is the state *before* this new userMessage
-    const apiMessages = [...chatHistory];
+    const apiMessages: ChatMessage[] = [...chatHistory];
     if (contextMessage) {
       apiMessages.push(contextMessage);
     }
     apiMessages.push(userMessage);
 
-    // Update UI chat history with user's message
     setChatHistory((prev) => [...prev, userMessage]);
     setMessage(""); // Clear input field
     setIsLoading(true);
@@ -261,7 +289,9 @@ const ChatApp = () => {
 
         if (response.ok) {
           const data = await response.json();
-          const assistantMessage = data.choices?.[0]?.message;
+          const assistantMessage = data.choices?.[0]?.message as
+            | ChatMessage
+            | undefined;
           if (assistantMessage) {
             setChatHistory((prev) => [...prev, assistantMessage]);
           } else {
@@ -272,52 +302,75 @@ const ChatApp = () => {
           saveCurrentChat(); // Save chat after successful response
           return; // Exit after successful attempt
         } else if (
-          (response.status === 429 || response.status >= 500) && // Retry on 429 or 5xx errors
+          (response.status === 429 || response.status >= 500) &&
           currentTry < MAX_RETRIES
         ) {
           const errorData = await response.json().catch(() => ({}));
           const delay = INITIAL_BACKOFF_MS * Math.pow(2, currentTry);
           setError(
-            `API request failed (status ${response.status}${errorData.error?.message ? `: ${errorData.error.message}` : ''}). Retrying in ${delay / 1000}s... (Attempt ${currentTry + 1}/${MAX_RETRIES})`
+            `API request failed (status ${response.status}${
+              errorData.error?.message ? `: ${errorData.error.message}` : ""
+            }). Retrying in ${delay / 1000}s... (Attempt ${
+              currentTry + 1
+            }/${MAX_RETRIES})`
           );
           setIsRetrying(true);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
           currentTry++;
         } else {
-          const errorData = await response.json().catch(() => ({ error: { message: "Failed to parse error response." } }));
+          const errorData = await response
+            .json()
+            .catch(() => ({
+              error: { message: "Failed to parse error response." },
+            }));
           setError(
-            `API error: ${response.status} - ${errorData.error?.message || "Unknown error"}. ${currentTry >= MAX_RETRIES ? 'Max retries reached.' : 'Non-retryable error.'}`
+            `API error: ${response.status} - ${
+              errorData.error?.message || "Unknown error"
+            }. ${
+              currentTry >= MAX_RETRIES
+                ? "Max retries reached."
+                : "Non-retryable error."
+            }`
           );
           setIsLoading(false);
           setIsRetrying(false);
-          return; // Exit after final failure or non-retryable error
+          return;
         }
-      } catch (err) { // Network error or other fetch-related error
+      } catch (err: unknown) {
         if (currentTry < MAX_RETRIES) {
           const delay = INITIAL_BACKOFF_MS * Math.pow(2, currentTry);
           setError(
-            `Network error: ${err.message}. Retrying in ${delay / 1000}s... (Attempt ${currentTry + 1}/${MAX_RETRIES})`
+            `Network error: ${
+              err instanceof Error ? err.message : String(err)
+            }. Retrying in ${delay / 1000}s... (Attempt ${
+              currentTry + 1
+            }/${MAX_RETRIES})`
           );
           setIsRetrying(true);
-          await new Promise(resolve => setTimeout(resolve, delay));
+          await new Promise((resolve) => setTimeout(resolve, delay));
           currentTry++;
         } else {
-          setError(`Network error: ${err.message}. Max retries reached.`);
+          setError(
+            `Network error: ${
+              err instanceof Error ? err.message : String(err)
+            }. Max retries reached.`
+          );
           setIsLoading(false);
           setIsRetrying(false);
-          return; // Exit after final failure
+          return;
         }
       }
     }
-    // Fallback if loop finishes unexpectedly (should be covered by returns)
     setIsLoading(false);
     setIsRetrying(false);
     if (currentTry > MAX_RETRIES) {
-        setError("Max retries reached. Failed to get a response from the assistant.");
+      setError(
+        "Max retries reached. Failed to get a response from the assistant."
+      );
     }
   };
 
-  const handleKeyDown = (e) => {
+  const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       sendMessage();
@@ -412,7 +465,9 @@ const ChatApp = () => {
             </label>
             <div className="flex flex-col gap-2">
               <button
-                onClick={() => fileInputRef.current.click()}
+                onClick={() => {
+                  if (fileInputRef.current) fileInputRef.current.click();
+                }}
                 className="px-3 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors"
               >
                 Upload Document
@@ -533,7 +588,13 @@ const ChatApp = () => {
                 {isLoading && (
                   <div className="p-3 rounded-lg max-w-3xl bg-gray-100">
                     <p className="text-sm font-semibold mb-1">Assistant</p>
-                    <p>{isRetrying ? `Retrying... Please wait. (${error || 'Attempting to reconnect...'})` : "Thinking..."}</p>
+                    <p>
+                      {isRetrying
+                        ? `Retrying... Please wait. (${
+                            error || "Attempting to reconnect..."
+                          })`
+                        : "Thinking..."}
+                    </p>
                   </div>
                 )}
               </div>
