@@ -127,7 +127,18 @@ const ChatApp = () => {
   };
 
   const sendMessage = () => {
-    if (!message.trim()) return;
+    if (!message.trim()) {
+      setError("Please enter a message to send.");
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
+    if (documents.length === 0) {
+      setError(
+        "Please upload a document or input text before sending a message."
+      );
+      setTimeout(() => setError(null), 3000);
+      return;
+    }
     if (!apiKey.trim()) {
       setError("Please enter an API key first");
       setTimeout(() => setError(null), 3000);
