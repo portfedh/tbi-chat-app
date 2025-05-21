@@ -1,10 +1,28 @@
 import React, { useState, useRef, useEffect } from "react";
 
 const ChatApp = () => {
-  const [apiKey, setApiKey] = useState("");
+  const [apiKey, setApiKey] = useState(() => {
+    const storedApiKey = localStorage.getItem("chatAppApiKey");
+    return storedApiKey || "";
+  });
   const [message, setMessage] = useState("");
   const [chatHistory, setChatHistory] = useState([]);
-  const [savedChats, setSavedChats] = useState([]);
+  const [savedChats, setSavedChats] = useState(() => {
+    const storedSavedChats = localStorage.getItem("chatAppSavedChats");
+    if (storedSavedChats) {
+      try {
+        return JSON.parse(storedSavedChats);
+      } catch (error) {
+        console.error(
+          "Failed to parse saved chats from localStorage on init:",
+          error
+        );
+        // Optionally, clear corrupted data: localStorage.removeItem("chatAppSavedChats");
+        return [];
+      }
+    }
+    return [];
+  });
   const [currentChatId, setCurrentChatId] = useState("new");
   const [currentChatTitle, setCurrentChatTitle] = useState("New Chat");
   const [isLoading, setIsLoading] = useState(false);
@@ -14,6 +32,16 @@ const ChatApp = () => {
   const [manualText, setManualText] = useState("");
   const [hasSentMessage, setHasSentMessage] = useState(false);
   const fileInputRef = useRef(null);
+
+  // Save API key to localStorage when it changes
+  useEffect(() => {
+    localStorage.setItem("chatAppApiKey", apiKey);
+  }, [apiKey]);
+
+  // Save chats to localStorage when they change
+  useEffect(() => {
+    localStorage.setItem("chatAppSavedChats", JSON.stringify(savedChats));
+  }, [savedChats]);
 
   // Make sure the input fields work correctly
   const handleApiKeyChange = (e) => {
@@ -100,7 +128,7 @@ const ChatApp = () => {
           resolve({
             name: file.name,
             type: file.type,
-            content: event.target.result,
+            content: (event.target.result as string).substring(0, 3000),
           });
         };
         reader.readAsText(file);
@@ -117,7 +145,7 @@ const ChatApp = () => {
       const manualDoc = {
         name: `Manual text (${new Date().toLocaleTimeString()})`,
         type: "text/plain",
-        content: manualText,
+        content: manualText.substring(0, 3000),
       };
       setDocuments((prev) => [...prev, manualDoc]);
       setManualText("");
@@ -160,7 +188,7 @@ const ChatApp = () => {
 
     try {
       // Mocked API call
-      
+
       setTimeout(() => {
         const response = {
           role: "assistant",
@@ -171,7 +199,6 @@ const ChatApp = () => {
         // Save chat after receiving response
         saveCurrentChat();
       }, 1000);
-      
 
       // Real implementation using fetch to OpenAI API
       // (async () => {
@@ -184,7 +211,7 @@ const ChatApp = () => {
       //         Authorization: `Bearer ${apiKey}`,
       //       },
       //       body: JSON.stringify({
-      //         model: "gpt-4-1106-preview", // or "gpt-4.1-nano" if available
+      //         model: "gpt-3.5-turbo", // Changed from gpt-4-1106-preview for potentially faster responses
       //         messages: [
       //           ...chatHistory,
       //           userMessage,
@@ -193,30 +220,30 @@ const ChatApp = () => {
       //             : []),
       //         ],
       //         temperature: 1,
-      //         max_tokens: 2048,
+      //         max_tokens: 1000,
       //         top_p: 1,
       //         // "store": true, // Not a standard OpenAI param, omit unless required by your backend
       //       }),
       //     }
       //   );
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(
-            errorData.error?.message || `API error: ${response.status}`
-          );
-        }
+      //   if (!response.ok) {
+      //     const errorData = await response.json();
+      //     throw new Error(
+      //       errorData.error?.message || `API error: ${response.status}`
+      //     );
+      //   }
 
-        const data = await response.json();
-        const assistantMessage = data.choices?.[0]?.message;
-        if (assistantMessage) {
-          setChatHistory((prev) => [...prev, assistantMessage]);
-        } else {
-          setError("No response from assistant.");
-        }
-        setIsLoading(false);
-        saveCurrentChat();
-      })();
+      //   const data = await response.json();
+      //   const assistantMessage = data.choices?.[0]?.message;
+      //   if (assistantMessage) {
+      //     setChatHistory((prev) => [...prev, assistantMessage]);
+      //   } else {
+      //     setError("No response from assistant.");
+      //   }
+      //   setIsLoading(false);
+      //   saveCurrentChat();
+      // })();
     } catch (err) {
       setError(`Error: ${err.message}`);
     }
@@ -396,7 +423,12 @@ const ChatApp = () => {
                       Type your message below and press <b>Send</b>
                     </li>
                     <li>
-                      Saved chats will appear in the sidebar for easy access.
+                      The assistant will respond based on the provided context.
+                    </li>
+                    <li>Only one message can be sent per chat.</li>
+                    <li>
+                      After receiving a response, click on the "New Chat" or
+                      "Save" button to save it.
                     </li>
                     <li>Click on a chat to rename it or view its details.</li>
                   </ul>
