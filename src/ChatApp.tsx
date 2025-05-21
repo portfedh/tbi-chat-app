@@ -33,6 +33,10 @@ const ChatApp = () => {
   const [hasSentMessage, setHasSentMessage] = useState(false);
   const fileInputRef = useRef(null);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isRetrying, setIsRetrying] = useState(false); // New state for retry feedback
+
+  const MAX_RETRIES = 5;
+  const INITIAL_BACKOFF_MS = 1000;
 
   // Effect for online/offline status
   useEffect(() => {
@@ -172,7 +176,7 @@ const ChatApp = () => {
     setDocuments((docs) => docs.filter((_, i) => i !== index));
   };
 
-  const sendMessage = () => {
+  const sendMessage = async () => {
     if (hasSentMessage) return;
     if (!message.trim()) {
       setError("Please enter a message to send.");
@@ -201,73 +205,115 @@ const ChatApp = () => {
 
     const userMessage = { role: "user", content: message };
     const context = documents.map((doc) => doc.content).join("\n\n");
+    const contextMessage = context
+      ? { role: "system", content: `Context:\n${context}` }
+      : null;
 
+    // Prepare messages for the API call
+    // chatHistory is the state *before* this new userMessage
+    const apiMessages = [...chatHistory];
+    if (contextMessage) {
+      apiMessages.push(contextMessage);
+    }
+    apiMessages.push(userMessage);
+
+    // Update UI chat history with user's message
     setChatHistory((prev) => [...prev, userMessage]);
-    setMessage("");
+    setMessage(""); // Clear input field
     setIsLoading(true);
     setError(null);
-    setHasSentMessage(true);
+    setHasSentMessage(true); // Mark that a message has been sent for this chat
+    setIsRetrying(false);
 
-    try {
-      // Mocked API call
+    // Remove mock API call and implement real call with retry
+    // try {
+    //   // Mocked API call
+    //   setTimeout(() => {
+    //     const response = {
+    //       role: "assistant",
+    //       content: `This is a simulated response. Message: "${userMessage.content}" along with ${documents.length} document(s) using the provided API key.`,
+    //     };
+    //     setChatHistory((prev) => [...prev, response]);
+    //     setIsLoading(false);
+    //     saveCurrentChat();
+    //   }, 1000);
 
-      setTimeout(() => {
-        const response = {
-          role: "assistant",
-          content: `This is a simulated response. Message: "${userMessage.content}" along with ${documents.length} document(s) using the provided API key.`,
-        };
-        setChatHistory((prev) => [...prev, response]);
-        setIsLoading(false);
-        // Save chat after receiving response
-        saveCurrentChat();
-      }, 1000);
+    let currentTry = 0;
+    while (currentTry <= MAX_RETRIES) {
+      try {
+        const response = await fetch(
+          "https://api.openai.com/v1/chat/completions",
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              model: "gpt-3.5-turbo",
+              messages: apiMessages,
+              temperature: 1,
+              max_tokens: 1000,
+              top_p: 1,
+            }),
+          }
+        );
 
-      // Real implementation using fetch to OpenAI API
-      // (async () => {
-      //   const response = await fetch(
-      //     "https://api.openai.com/v1/chat/completions",
-      //     {
-      //       method: "POST",
-      //       headers: {
-      //         "Content-Type": "application/json",
-      //         Authorization: `Bearer ${apiKey}`,
-      //       },
-      //       body: JSON.stringify({
-      //         model: "gpt-3.5-turbo", // Changed from gpt-4-1106-preview for potentially faster responses
-      //         messages: [
-      //           ...chatHistory,
-      //           userMessage,
-      //           ...(context
-      //             ? [{ role: "system", content: `Context:\n${context}` }]
-      //             : []),
-      //         ],
-      //         temperature: 1,
-      //         max_tokens: 1000,
-      //         top_p: 1,
-      //         // "store": true, // Not a standard OpenAI param, omit unless required by your backend
-      //       }),
-      //     }
-      //   );
-
-      //   if (!response.ok) {
-      //     const errorData = await response.json();
-      //     throw new Error(
-      //       errorData.error?.message || `API error: ${response.status}`
-      //     );
-      //   }
-
-      //   const data = await response.json();
-      //   const assistantMessage = data.choices?.[0]?.message;
-      //   if (assistantMessage) {
-      //     setChatHistory((prev) => [...prev, assistantMessage]);
-      //   } else {
-      //     setError("No response from assistant.");
-      //   }
-      //   setIsLoading(false);
-      //   saveCurrentChat();
-      // })();
-    } catch (err) {
-      setError(`Error: ${err.message}`);
+        if (response.ok) {
+          const data = await response.json();
+          const assistantMessage = data.choices?.[0]?.message;
+          if (assistantMessage) {
+            setChatHistory((prev) => [...prev, assistantMessage]);
+          } else {
+            setError("No response from assistant.");
+          }
+          setIsLoading(false);
+          setIsRetrying(false);
+          saveCurrentChat(); // Save chat after successful response
+          return; // Exit after successful attempt
+        } else if (
+          (response.status === 429 || response.status >= 500) && // Retry on 429 or 5xx errors
+          currentTry < MAX_RETRIES
+        ) {
+          const errorData = await response.json().catch(() => ({}));
+          const delay = INITIAL_BACKOFF_MS * Math.pow(2, currentTry);
+          setError(
+            `API request failed (status ${response.status}${errorData.error?.message ? `: ${errorData.error.message}` : ''}). Retrying in ${delay / 1000}s... (Attempt ${currentTry + 1}/${MAX_RETRIES})`
+          );
+          setIsRetrying(true);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          currentTry++;
+        } else {
+          const errorData = await response.json().catch(() => ({ error: { message: "Failed to parse error response." } }));
+          setError(
+            `API error: ${response.status} - ${errorData.error?.message || "Unknown error"}. ${currentTry >= MAX_RETRIES ? 'Max retries reached.' : 'Non-retryable error.'}`
+          );
+          setIsLoading(false);
+          setIsRetrying(false);
+          return; // Exit after final failure or non-retryable error
+        }
+      } catch (err) { // Network error or other fetch-related error
+        if (currentTry < MAX_RETRIES) {
+          const delay = INITIAL_BACKOFF_MS * Math.pow(2, currentTry);
+          setError(
+            `Network error: ${err.message}. Retrying in ${delay / 1000}s... (Attempt ${currentTry + 1}/${MAX_RETRIES})`
+          );
+          setIsRetrying(true);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          currentTry++;
+        } else {
+          setError(`Network error: ${err.message}. Max retries reached.`);
+          setIsLoading(false);
+          setIsRetrying(false);
+          return; // Exit after final failure
+        }
+      }
+    }
+    // Fallback if loop finishes unexpectedly (should be covered by returns)
+    setIsLoading(false);
+    setIsRetrying(false);
+    if (currentTry > MAX_RETRIES) {
+        setError("Max retries reached. Failed to get a response from the assistant.");
     }
   };
 
@@ -487,7 +533,7 @@ const ChatApp = () => {
                 {isLoading && (
                   <div className="p-3 rounded-lg max-w-3xl bg-gray-100">
                     <p className="text-sm font-semibold mb-1">Assistant</p>
-                    <p>Thinking...</p>
+                    <p>{isRetrying ? `Retrying... Please wait. (${error || 'Attempting to reconnect...'})` : "Thinking..."}</p>
                   </div>
                 )}
               </div>
