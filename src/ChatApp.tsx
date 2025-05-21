@@ -159,39 +159,64 @@ const ChatApp = () => {
     setHasSentMessage(true);
 
     try {
-      // Mocked API call - in a real app this would call your AI API
-      // Example with documents included as context
+      // Mocked API call
+      
       setTimeout(() => {
         const response = {
           role: "assistant",
-          content: `This is a simulated response. In a real implementation, I would process your message: "${userMessage.content}" along with ${documents.length} document(s) using the provided API key.`,
+          content: `This is a simulated response. Message: "${userMessage.content}" along with ${documents.length} document(s) using the provided API key.`,
         };
         setChatHistory((prev) => [...prev, response]);
         setIsLoading(false);
         // Save chat after receiving response
         saveCurrentChat();
       }, 1000);
+      
 
-      /* Real implementation would be something like:
-      const response = await fetch('https://api.your-ai-provider.com/chat', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${apiKey}`
-        },
-        body: JSON.stringify({
-          messages: [...chatHistory, userMessage],
-          context: context
-        })
-      });
-      
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
-      }
-      
-      const data = await response.json();
-      setChatHistory(prev => [...prev, data.message]);
-      */
+      // Real implementation using fetch to OpenAI API
+      // (async () => {
+      //   const response = await fetch(
+      //     "https://api.openai.com/v1/chat/completions",
+      //     {
+      //       method: "POST",
+      //       headers: {
+      //         "Content-Type": "application/json",
+      //         Authorization: `Bearer ${apiKey}`,
+      //       },
+      //       body: JSON.stringify({
+      //         model: "gpt-4-1106-preview", // or "gpt-4.1-nano" if available
+      //         messages: [
+      //           ...chatHistory,
+      //           userMessage,
+      //           ...(context
+      //             ? [{ role: "system", content: `Context:\n${context}` }]
+      //             : []),
+      //         ],
+      //         temperature: 1,
+      //         max_tokens: 2048,
+      //         top_p: 1,
+      //         // "store": true, // Not a standard OpenAI param, omit unless required by your backend
+      //       }),
+      //     }
+      //   );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(
+            errorData.error?.message || `API error: ${response.status}`
+          );
+        }
+
+        const data = await response.json();
+        const assistantMessage = data.choices?.[0]?.message;
+        if (assistantMessage) {
+          setChatHistory((prev) => [...prev, assistantMessage]);
+        } else {
+          setError("No response from assistant.");
+        }
+        setIsLoading(false);
+        saveCurrentChat();
+      })();
     } catch (err) {
       setError(`Error: ${err.message}`);
     }
