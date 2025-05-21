@@ -12,6 +12,7 @@ const ChatApp = () => {
   const [documents, setDocuments] = useState([]);
   const [showTextInput, setShowTextInput] = useState(false);
   const [manualText, setManualText] = useState("");
+  const [hasSentMessage, setHasSentMessage] = useState(false);
   const fileInputRef = useRef(null);
 
   // Make sure the input fields work correctly
@@ -33,6 +34,7 @@ const ChatApp = () => {
     setCurrentChatTitle("New Chat");
     setChatHistory([]);
     setDocuments([]);
+    setHasSentMessage(false);
   };
 
   const saveCurrentChat = () => {
@@ -69,6 +71,7 @@ const ChatApp = () => {
       setCurrentChatTitle(chatToLoad.title);
       setChatHistory(chatToLoad.messages);
       setDocuments(chatToLoad.documents || []);
+      setHasSentMessage(chatToLoad.messages && chatToLoad.messages.length > 0);
     }
   };
 
@@ -127,6 +130,7 @@ const ChatApp = () => {
   };
 
   const sendMessage = () => {
+    if (hasSentMessage) return;
     if (!message.trim()) {
       setError("Please enter a message to send.");
       setTimeout(() => setError(null), 3000);
@@ -152,6 +156,7 @@ const ChatApp = () => {
     setMessage("");
     setIsLoading(true);
     setError(null);
+    setHasSentMessage(true);
 
     try {
       // Mocked API call - in a real app this would call your AI API
@@ -418,9 +423,10 @@ const ChatApp = () => {
               />
               <button
                 onClick={sendMessage}
-                disabled={isLoading}
+                disabled={isLoading || hasSentMessage}
                 className={`px-4 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors self-end ${
-                  isLoading && "opacity-50 cursor-not-allowed"
+                  (isLoading || hasSentMessage) &&
+                  "opacity-50 cursor-not-allowed"
                 }`}
               >
                 Send
